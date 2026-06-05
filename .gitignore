@@ -5,3 +5,12 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+.DS_Store
+
+# PyInstaller
+dist/
+build/
+*.spec
+
+# uv
+uv.lock

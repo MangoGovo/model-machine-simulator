@@ -6,6 +6,7 @@ from model_machine.loader import (
     ProgramLoadError,
     load_microprogram_file,
     load_program_file,
+    parse_combined_text,
     parse_u8,
 )
 from model_machine.machine import ModelMachine
@@ -80,16 +81,22 @@ def render_dump(machine: ModelMachine, start: int, end: int) -> list[str]:
 
 
 def run_simulation(
-    program: str | Path,
+    program: str | Path | None = None,
     *,
     input_values: list[int],
     microprogram: str | Path | None = None,
+    combined_text: str | None = None,
     max_steps: int = 10000,
     trace: bool = False,
     dump_ranges: list[tuple[int, int]] | None = None,
 ) -> str:
-    records = load_program_file(program)
-    micro_records = load_microprogram_file(microprogram) if microprogram is not None else []
+    if combined_text is not None:
+        records, micro_records = parse_combined_text(combined_text)
+    elif program is not None:
+        records = load_program_file(program)
+        micro_records = load_microprogram_file(microprogram) if microprogram is not None else []
+    else:
+        raise ValueError("either program or combined_text must be provided")
 
     machine = ModelMachine(input_values=input_values)
     machine.load_records(records)
