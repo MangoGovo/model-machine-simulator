@@ -41,3 +41,17 @@ class ALU:
     def shr(self, value: int) -> ALUResult:
         result = (value >> 1) & BYTE_MASK
         return ALUResult(value=result, zero=int(result == 0), carry=value & 0x01)
+
+    def ror(self, value: int, carry_in: int) -> ALUResult:
+        """Rotate right through carry.
+
+        ``carry_in`` (0 or 1) is shifted into the MSB; the LSB of
+        *value* is shifted out as the new carry.
+        """
+        msb = (carry_in & 1) << 7
+        result = ((value >> 1) | msb) & BYTE_MASK
+        return ALUResult(value=result, zero=int(result == 0), carry=value & 0x01)
+
+    def bit_or(self, left: int, right: int) -> ALUResult:
+        value = (left | right) & BYTE_MASK
+        return ALUResult(value=value, zero=int(value == 0), carry=0)

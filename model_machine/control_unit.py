@@ -125,8 +125,13 @@ class ControlUnit:
             mnemonic = self._unary_alu("INC", dest, self.alu.inc, micro_ops)
         elif group == 0x80:
             mnemonic = self._binary_alu("SUB", dest, src, self.alu.sub, micro_ops)
+        elif group == 0x90 and microprogram_mode:
+            mnemonic = self._binary_alu("OR", dest, src, self.alu.bit_or, micro_ops)
         elif group == 0xA0 and microprogram_mode:
-            mnemonic = self._unary_alu("SHR", dest, self.alu.shr, micro_ops)
+            if src == 0:
+                mnemonic = self._unary_alu("SHR", dest, self.alu.shr, micro_ops)
+            else:
+                mnemonic = self._ror("ROR", dest, micro_ops)
         elif group == 0xB0 and microprogram_mode:
             mnemonic = self._compare(dest, src, micro_ops)
         elif group in {0xB0, 0xE0}:
@@ -204,6 +209,14 @@ class ControlUnit:
         regs = self.registers
         regs.a = self._transfer(f"R{dest}", "A", regs.get_reg(dest), micro_ops)
         result = operation(regs.a)
+        self._commit_alu_result(dest, result, micro_ops)
+        return f"{name} R{dest}"
+
+    def _ror(self, name: str, dest: int, micro_ops: list[str]) -> str:
+        """Rotate right through carry — FC is shifted into MSB, LSB -> new FC."""
+        regs = self.registers
+        regs.a = self._transfer(f"R{dest}", "A", regs.get_reg(dest), micro_ops)
+        result = self.alu.ror(regs.a, regs.fc)
         self._commit_alu_result(dest, result, micro_ops)
         return f"{name} R{dest}"
 
