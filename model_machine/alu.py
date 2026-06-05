@@ -24,6 +24,11 @@ class ALU:
         value = raw & BYTE_MASK
         return ALUResult(value=value, zero=int(value == 0), carry=int(raw < 0))
 
+    def compare(self, left: int, right: int) -> ALUResult:
+        raw = left - right
+        value = raw & BYTE_MASK
+        return ALUResult(value=value, zero=int(value == 0), carry=int(raw < 0))
+
     def bit_and(self, left: int, right: int) -> ALUResult:
         value = (left & right) & BYTE_MASK
         return ALUResult(value=value, zero=int(value == 0), carry=0)
@@ -32,3 +37,7 @@ class ALU:
         raw = value + 1
         result = raw & BYTE_MASK
         return ALUResult(value=result, zero=int(result == 0), carry=int(raw > BYTE_MASK))
+
+    def shr(self, value: int) -> ALUResult:
+        result = (value >> 1) & BYTE_MASK
+        return ALUResult(value=result, zero=int(result == 0), carry=value & 0x01)

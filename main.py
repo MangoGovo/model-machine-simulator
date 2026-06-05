@@ -4,7 +4,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from model_machine.loader import ProgramLoadError, load_program_file, parse_u8
+from model_machine.loader import (
+    ProgramLoadError,
+    load_microprogram_file,
+    load_program_file,
+    parse_u8,
+)
 from model_machine.machine import ModelMachine
 
 
@@ -20,6 +25,16 @@ def parse_dump_range(value: str) -> tuple[int, int]:
     if start > end:
         raise argparse.ArgumentTypeError("dump start must be <= end")
     return start, end
+
+
+def parse_input_values(values: list[str] | None) -> list[int]:
+    tokens: list[str] = []
+    for value in values or ["00"]:
+        tokens.extend(token for token in value.replace(",", " ").split() if token)
+
+    if not tokens:
+        raise ProgramLoadError("at least one input byte is required")
+    return [parse_u8(token, f"input {index}") for index, token in enumerate(tokens, start=1)]
 
 
 def format_registers(snapshot: dict[str, int]) -> str:
@@ -81,7 +96,16 @@ def print_dump(machine: ModelMachine, start: int, end: int) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Complex model machine simulator")
     parser.add_argument("program", type=Path, help="machine instruction text file")
-    parser.add_argument("--input", default="00", help="one byte read by the IN unit, hex by default")
+    parser.add_argument(
+        "--microprogram",
+        type=Path,
+        help="microprogram text file containing $M records",
+    )
+    parser.add_argument(
+        "--input",
+        action="append",
+        help="input byte(s) read by IN; repeat this option or comma-separate values",
+    )
     parser.add_argument("--trace", action="store_true", help="print instruction and component trace")
     parser.add_argument(
         "--dump",
@@ -101,14 +125,19 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--max-steps must be positive")
 
     try:
-        input_value = parse_u8(args.input, "input")
+        input_values = parse_input_values(args.input)
         records = load_program_file(args.program)
+        micro_records = (
+            load_microprogram_file(args.microprogram) if args.microprogram is not None else []
+        )
     except (OSError, ProgramLoadError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    machine = ModelMachine(input_values=[input_value])
+    machine = ModelMachine(input_values=input_values)
     machine.load_records(records)
+    if micro_records:
+        machine.load_microprogram_records(micro_records)
 
     try:
         result = machine.run(max_steps=args.max_steps, stop_on_output=True)
@@ -119,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.trace:
         print_trace(machine, result.traces)
 
+    if micro_records:
+        print(f"Microprogram: {len(micro_records)} instruction(s) loaded")
     print(f"Stopped: {result.reason} after {result.steps} instruction(s)")
     print("Registers:")
     print("  " + format_registers(machine.registers.snapshot()))

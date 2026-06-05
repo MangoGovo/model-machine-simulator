@@ -6,6 +6,12 @@ Run the sample program:
 python3 main.py programs/sum_1_to_x.txt --input 05 --trace
 ```
 
+Run a machine program with a separate microprogram:
+
+```bash
+python3 main.py 机器程序.txt --microprogram 微程序.txt --input 05,03
+```
+
 Program files use the experiment manual style:
 
 ```text
