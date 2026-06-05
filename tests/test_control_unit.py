@@ -1,0 +1,103 @@
+import unittest
+from pathlib import Path
+
+from model_machine.loader import load_program_file, parse_program_text
+from model_machine.machine import ModelMachine
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def run_program(text: str, input_value: int = 0x00, stop_on_output: bool = False):
+    machine = ModelMachine(input_values=[input_value])
+    machine.load_records(parse_program_text(text))
+    result = machine.run(max_steps=1000, stop_on_output=stop_on_output)
+    return machine, result
+
+
+class ControlUnitTest(unittest.TestCase):
+    def test_arithmetic_and_halt_instructions(self) -> None:
+        machine, result = run_program(
+            """
+            00 60
+            01 0F
+            02 61
+            03 03
+            04 14
+            05 70
+            06 04
+            07 84
+            08 50
+            """
+        )
+
+        self.assertEqual(result.reason, "halted")
+        self.assertEqual(result.steps, 7)
+        self.assertEqual(machine.registers.get_reg(0), 0x04)
+        self.assertEqual(machine.registers.fz, 0)
+        self.assertEqual(machine.registers.fc, 0)
+
+    def test_bzc_and_jmp_instructions(self) -> None:
+        machine, result = run_program(
+            """
+            00 60
+            01 00
+            02 10
+            03 F0
+            04 08
+            05 61
+            06 FF
+            07 50
+            08 E0
+            09 0B
+            0A 50
+            0B 61
+            0C 2A
+            0D 50
+            """
+        )
+
+        self.assertEqual(result.reason, "halted")
+        self.assertEqual(machine.registers.get_reg(1), 0x2A)
+
+    def test_lad_sta_in_out_instructions(self) -> None:
+        machine, result = run_program(
+            """
+            00 62
+            01 80
+            02 20
+            03 00
+            04 D0
+            05 80
+            06 CB
+            07 00
+            08 3C
+            09 40
+            0A 50
+            """,
+            input_value=0x5A,
+            stop_on_output=True,
+        )
+
+        self.assertEqual(result.reason, "output")
+        self.assertEqual(machine.memory.read(0x80), 0x5A)
+        self.assertEqual(machine.registers.get_reg(3), 0x5A)
+        self.assertEqual(machine.io.outputs[-1].port, 0x40)
+        self.assertEqual(machine.io.outputs[-1].value, 0x5A)
+
+    def test_sample_program_results(self) -> None:
+        records = load_program_file(ROOT / "programs" / "sum_1_to_x.txt")
+
+        for input_value, expected in [(0x00, 0x00), (0x05, 0x0F), (0x0F, 0x78)]:
+            with self.subTest(input=input_value):
+                machine = ModelMachine(input_values=[input_value])
+                machine.load_records(records)
+                result = machine.run(max_steps=1000, stop_on_output=True)
+
+                self.assertEqual(result.reason, "output")
+                self.assertEqual(machine.memory.read(0x70), expected)
+                self.assertEqual(machine.io.outputs[-1].value, expected)
+
+
+if __name__ == "__main__":
+    unittest.main()

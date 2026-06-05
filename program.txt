@@ -1,0 +1,252 @@
+; Combination number program without a lookup table.
+; Input byte format: high nibble is n, low nibble is k.
+; Example: input 53H computes C(5,3) = 0AH.
+; The result low byte is stored at 70H and written to OUT port 40H.
+;
+; Formula:
+;   result = result * (n - i + 1) / i, for i = 1..min(k,n-k)
+; Multiplication is repeated addition.
+; Division is repeated subtraction.
+; 16-bit temporary values are kept in memory so n,k <= 15 work correctly.
+
+$P 00 22 ; START: IN R2,00H
+$P 01 00
+$P 02 60 ; LDI R0,00H
+$P 03 00
+$P 04 08 ; ADD R0,R2 ; copy input
+$P 05 61 ; LDI R1,0FH
+$P 06 0F
+$P 07 14 ; AND R0,R1 ; R0 = k
+$P 08 D0 ; STA K,R0
+$P 09 F4
+$P 0A 61 ; LDI R1,00H ; n counter
+$P 0B 00
+$P 0C 63 ; LDI R3,10H
+$P 0D 10
+$P 0E 8E ; DIVN_LOOP: SUB R2,R3
+$P 0F F0 ; BZC DIVN_CHECK
+$P 10 14
+$P 11 71 ; INC R1 ; n++
+$P 12 E0 ; JMP DIVN_LOOP
+$P 13 0E
+$P 14 1A ; DIVN_CHECK: AND R2,R2
+$P 15 F0 ; BZC DIVN_EXACT
+$P 16 19
+$P 17 E0 ; JMP HAVE_N
+$P 18 1A
+$P 19 71 ; DIVN_EXACT: INC R1
+$P 1A D1 ; STA N,R1
+$P 1B F3
+$P 1C 63 ; LDI R3,N
+$P 1D F3
+$P 1E CD ; LAD R1,N
+$P 1F 00
+$P 20 63 ; LDI R3,K
+$P 21 F4
+$P 22 CC ; LAD R0,K
+$P 23 00
+$P 24 81 ; SUB R1,R0 ; n-k
+$P 25 F0 ; BZC NK_CHECK
+$P 26 2E
+$P 27 D1 ; STA CNT,R1
+$P 28 F8
+$P 29 81 ; SUB R1,R0 ; (n-k)-k
+$P 2A F0 ; BZC USE_DIFF
+$P 2B 33
+$P 2C E0 ; JMP INIT
+$P 2D 39
+$P 2E 15 ; NK_CHECK: AND R1,R1
+$P 2F F0 ; BZC USE_ZERO
+$P 30 37
+$P 31 E0 ; JMP INVALID
+$P 32 E2
+$P 33 63 ; USE_DIFF: LDI R3,CNT
+$P 34 F8
+$P 35 CD ; LAD R1,CNT
+$P 36 00
+$P 37 D1 ; USE_ZERO: STA K,R1
+$P 38 F4
+$P 39 62 ; INIT: LDI R2,01H
+$P 3A 01
+$P 3B D2 ; STA RESL,R2
+$P 3C F6
+$P 3D D2 ; STA I,R2
+$P 3E F5
+$P 3F 62 ; LDI R2,00H
+$P 40 00
+$P 41 D2 ; STA RESH,R2
+$P 42 F7
+$P 43 63 ; MAIN_LOOP: LDI R3,K
+$P 44 F4
+$P 45 CD ; LAD R1,K
+$P 46 00
+$P 47 63 ; LDI R3,I
+$P 48 F5
+$P 49 CC ; LAD R0,I
+$P 4A 00
+$P 4B 81 ; SUB R1,R0 ; k-i
+$P 4C F0 ; BZC KI_CHECK
+$P 4D 50
+$P 4E E0 ; JMP DO_STEP
+$P 4F 55
+$P 50 15 ; KI_CHECK: AND R1,R1
+$P 51 F0 ; BZC DO_STEP
+$P 52 55
+$P 53 E0 ; JMP OUTPUT
+$P 54 E8
+$P 55 63 ; DO_STEP: LDI R3,N
+$P 56 F3
+$P 57 CD ; LAD R1,N
+$P 58 00
+$P 59 63 ; LDI R3,I
+$P 5A F5
+$P 5B CC ; LAD R0,I
+$P 5C 00
+$P 5D 81 ; SUB R1,R0 ; n-i
+$P 5E 71 ; INC R1 ; factor = n-i+1
+$P 5F D1 ; STA CNT,R1
+$P 60 F8
+$P 61 60 ; LDI R0,00H
+$P 62 00
+$P 63 D0 ; STA REML,R0
+$P 64 F9
+$P 65 D0 ; STA REMH,R0
+$P 66 FA
+$P 67 63 ; MUL_LOOP: LDI R3,REMH
+$P 68 FA
+$P 69 CE ; LAD R2,REMH
+$P 6A 00
+$P 6B 63 ; LDI R3,REML
+$P 6C F9
+$P 6D CC ; LAD R0,REML
+$P 6E 00
+$P 6F 63 ; LDI R3,RESL
+$P 70 F6
+$P 71 CD ; LAD R1,RESL
+$P 72 00
+$P 73 04 ; ADD product low,result low
+$P 74 D0 ; STA REML,R0
+$P 75 F9
+$P 76 F0 ; BZC MUL_CARRY
+$P 77 7A
+$P 78 E0 ; JMP MUL_HIGH
+$P 79 7B
+$P 7A 72 ; MUL_CARRY: INC product high
+$P 7B 63 ; MUL_HIGH: LDI R3,RESH
+$P 7C F7
+$P 7D CD ; LAD R1,RESH
+$P 7E 00
+$P 7F 06 ; ADD product high,result high
+$P 80 D2 ; STA REMH,R2
+$P 81 FA
+$P 82 63 ; LDI R3,CNT
+$P 83 F8
+$P 84 CC ; LAD R0,CNT
+$P 85 00
+$P 86 63 ; LDI R3,01H
+$P 87 01
+$P 88 8C ; SUB R0,R3 ; counter--
+$P 89 D0 ; STA CNT,R0
+$P 8A F8
+$P 8B F0 ; BZC MUL_DONE
+$P 8C 8F
+$P 8D E0 ; JMP MUL_LOOP
+$P 8E 67
+$P 8F 62 ; MUL_DONE: LDI R2,00H
+$P 90 00
+$P 91 D2 ; STA QLO,R2
+$P 92 FB
+$P 93 D2 ; STA QHI,R2
+$P 94 FC
+$P 95 63 ; DIV_LOOP: LDI R3,REML
+$P 96 F9
+$P 97 CC ; LAD R0,REML
+$P 98 00
+$P 99 63 ; LDI R3,I
+$P 9A F5
+$P 9B CD ; LAD R1,I
+$P 9C 00
+$P 9D 84 ; SUB rem low,i
+$P 9E F0 ; BZC DIV_CHECK
+$P 9F A4
+$P A0 D0 ; STA REML,R0
+$P A1 F9
+$P A2 E0 ; JMP DIV_ACCEPT
+$P A3 B9
+$P A4 10 ; DIV_CHECK: AND R0,R0
+$P A5 F0 ; BZC DIV_EQUAL
+$P A6 B7
+$P A7 63 ; LDI R3,REMH
+$P A8 FA
+$P A9 CE ; LAD R2,REMH
+$P AA 00
+$P AB 1A ; AND R2,R2 ; rem high == 0?
+$P AC F0 ; BZC DIV_DONE
+$P AD CD
+$P AE D0 ; STA REML,R0
+$P AF F9
+$P B0 63 ; LDI R3,01H
+$P B1 01
+$P B2 8E ; SUB R2,R3 ; rem high--
+$P B3 D2 ; STA REMH,R2
+$P B4 FA
+$P B5 E0 ; JMP DIV_ACCEPT
+$P B6 B9
+$P B7 D0 ; DIV_EQUAL: STA REML,R0
+$P B8 F9
+$P B9 63 ; DIV_ACCEPT: LDI R3,QLO
+$P BA FB
+$P BB CE ; LAD R2,QLO
+$P BC 00
+$P BD 72 ; INC QLO
+$P BE D2 ; STA QLO,R2
+$P BF FB
+$P C0 F0 ; BZC DIV_QHI
+$P C1 C4
+$P C2 E0 ; JMP DIV_LOOP
+$P C3 95
+$P C4 63 ; DIV_QHI: LDI R3,QHI
+$P C5 FC
+$P C6 CE ; LAD R2,QHI
+$P C7 00
+$P C8 72 ; INC QHI
+$P C9 D2 ; STA QHI,R2
+$P CA FC
+$P CB E0 ; JMP DIV_LOOP
+$P CC 95
+$P CD 63 ; DIV_DONE: LDI R3,QLO
+$P CE FB
+$P CF CE ; LAD R2,QLO
+$P D0 00
+$P D1 D2 ; STA RESL,R2
+$P D2 F6
+$P D3 63 ; LDI R3,QHI
+$P D4 FC
+$P D5 CE ; LAD R2,QHI
+$P D6 00
+$P D7 D2 ; STA RESH,R2
+$P D8 F7
+$P D9 63 ; LDI R3,I
+$P DA F5
+$P DB CC ; LAD R0,I
+$P DC 00
+$P DD 70 ; INC R0 ; i++
+$P DE D0 ; STA I,R0
+$P DF F5
+$P E0 E0 ; JMP MAIN_LOOP
+$P E1 43
+$P E2 62 ; INVALID: LDI R2,00H
+$P E3 00
+$P E4 D2 ; STA RESL,R2
+$P E5 F6
+$P E6 E0 ; JMP OUTPUT
+$P E7 E8
+$P E8 63 ; OUTPUT: LDI R3,RESL
+$P E9 F6
+$P EA CE ; LAD R2,RESL
+$P EB 00
+$P EC D2 ; STA 70H,R2
+$P ED 70
+$P EE 38 ; OUT 40H,R2
+$P EF 40
+$P F0 50 ; HLT

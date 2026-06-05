@@ -1,0 +1,50 @@
+; Complex model machine sample program.
+; Reads X from IN, masks its low 4 bits, computes 1+2+...+X,
+; stores the result at 70H and writes it to OUT port 40H.
+
+$P 00 20 ; START: IN R0,00H
+$P 01 00
+$P 02 61 ; LDI R1,0FH
+$P 03 0F
+$P 04 14 ; AND R0,R1
+$P 05 61 ; LDI R1,00H
+$P 06 00
+$P 07 F0 ; BZC RESULT
+$P 08 16
+$P 09 62 ; LDI R2,60H
+$P 0A 60
+$P 0B CB ; LOOP: LAD R3,[R2],00H
+$P 0C 00
+$P 0D 0D ; ADD R1,R3
+$P 0E 72 ; INC R2
+$P 0F 63 ; LDI R3,01H
+$P 10 01
+$P 11 8C ; SUB R0,R3
+$P 12 F0 ; BZC RESULT
+$P 13 16
+$P 14 E0 ; JMP LOOP
+$P 15 0B
+$P 16 D1 ; RESULT: STA 70H,R1
+$P 17 70
+$P 18 34 ; OUT 40H,R1
+$P 19 40
+$P 1A B0 ; JMP START
+$P 1B 00
+$P 1C 50 ; HLT
+
+; Data stored at 60H..6EH.
+$P 60 01
+$P 61 02
+$P 62 03
+$P 63 04
+$P 64 05
+$P 65 06
+$P 66 07
+$P 67 08
+$P 68 09
+$P 69 0A
+$P 6A 0B
+$P 6B 0C
+$P 6C 0D
+$P 6D 0E
+$P 6E 0F
