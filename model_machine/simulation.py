@@ -23,24 +23,28 @@ def parse_input_values(values: list[str] | None) -> list[int]:
 
 
 def format_registers(snapshot: dict[str, int]) -> str:
-    ordered = ["R0", "R1", "R2", "R3", "PC", "AR", "IR", "A", "B", "FZ", "FC"]
+    ordered = ["R0", "R1", "R2", "R3", "PC", "AR", "IR", "MPC", "MIR", "A", "B", "FZ", "FC"]
     parts: list[str] = []
     for name in ordered:
         value = snapshot[name]
         if name in {"FZ", "FC"}:
             parts.append(f"{name}={value}")
+        elif name == "MIR":
+            parts.append(f"{name}={value:06X}")
         else:
             parts.append(f"{name}={value:02X}")
     return " ".join(parts)
 
 
 def format_changes(before: dict[str, int], after: dict[str, int]) -> str:
-    ordered = ["R0", "R1", "R2", "R3", "PC", "AR", "IR", "A", "B", "FZ", "FC"]
+    ordered = ["R0", "R1", "R2", "R3", "PC", "AR", "IR", "MPC", "MIR", "A", "B", "FZ", "FC"]
     changes = []
     for name in ordered:
         if before[name] != after[name]:
             if name in {"FZ", "FC"}:
                 changes.append(f"{name}:{before[name]}->{after[name]}")
+            elif name == "MIR":
+                changes.append(f"{name}:{before[name]:06X}->{after[name]:06X}")
             else:
                 changes.append(f"{name}:{before[name]:02X}->{after[name]:02X}")
     return " ".join(changes) if changes else "no register changes"
@@ -98,7 +102,7 @@ def run_simulation(
     else:
         raise ValueError("either program or combined_text must be provided")
 
-    machine = ModelMachine(input_values=input_values)
+    machine = ModelMachine(input_values=input_values, execution_mode="direct" if micro_records else "indexed")
     machine.load_records(records)
     if micro_records:
         machine.load_microprogram_records(micro_records)

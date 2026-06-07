@@ -32,8 +32,8 @@ class SimulatorApp(tk.Tk):
         root.columnconfigure(0, weight=1)
         root.columnconfigure(1, weight=1)
         root.columnconfigure(2, weight=0)
-        root.rowconfigure(0, weight=1)  # program text area
-        root.rowconfigure(6, weight=1)  # output text area
+        root.rowconfigure(1, weight=1)  # program text area
+        root.rowconfigure(7, weight=1)  # output text area
 
         # Row 0: program input label
         ttk.Label(
@@ -103,6 +103,8 @@ class SimulatorApp(tk.Tk):
         actions.grid(
             row=6, column=0, columnspan=3, sticky="ew", pady=(12, 8)
         )
+        actions.columnconfigure(0, weight=0)
+        actions.columnconfigure(1, weight=0)
         ttk.Button(actions, text="运行", command=self._run).pack(
             side="left"
         )

@@ -11,6 +11,8 @@ class RegisterFile:
     pc: int = 0
     ar: int = 0
     ir: int = 0
+    mir: int = 0
+    mpc: int = 0
     a: int = 0
     b: int = 0
     fz: int = 0
@@ -33,6 +35,8 @@ class RegisterFile:
             "PC": self.pc,
             "AR": self.ar,
             "IR": self.ir,
+            "MIR": self.mir,
+            "MPC": self.mpc,
             "A": self.a,
             "B": self.b,
             "FZ": self.fz,
