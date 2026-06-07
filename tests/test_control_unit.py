@@ -1,7 +1,14 @@
+from __future__ import annotations
+
 import unittest
 from pathlib import Path
 
-from model_machine.loader import load_program_file, parse_microprogram_text, parse_program_text
+from model_machine.loader import (
+    load_program_file,
+    parse_combined_text,
+    parse_microprogram_text,
+    parse_program_text,
+)
 from model_machine.machine import ModelMachine
 
 
@@ -166,6 +173,28 @@ class ControlUnitTest(unittest.TestCase):
                 self.assertEqual(result.reason, "output")
                 self.assertEqual(machine.memory.read(0x70), expected)
                 self.assertEqual(machine.io.outputs[-1].value, expected)
+
+    def test_combination_program_runs_in_direct_mode_without_explicit_microprogram(self) -> None:
+        records = load_program_file(ROOT / "examples" / "combination_number.txt")
+
+        machine = ModelMachine(input_values=[0x05, 0x03], execution_mode="direct")
+        machine.load_records(records)
+        result = machine.run(max_steps=10000, stop_on_output=True)
+
+        self.assertEqual(result.reason, "output")
+        self.assertEqual(machine.io.outputs[-1].value, 0x0A)
+
+    def test_course_microprogram_runs_without_opcode_desync(self) -> None:
+        text = (ROOT / "examples" / "signed_division_course.txt").read_text(encoding="utf-8")
+        records, micro_records = parse_combined_text(text)
+
+        machine = ModelMachine(input_values=[0xE0, 0x40])
+        machine.load_records(records)
+        machine.load_microprogram_records(micro_records)
+        result = machine.run(max_steps=2000, stop_on_output=False)
+
+        self.assertNotEqual(result.reason, "max_steps")
+        self.assertEqual(machine.memory.read(0x16), 0xC0)
 
 
 if __name__ == "__main__":
