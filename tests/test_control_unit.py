@@ -196,6 +196,17 @@ class ControlUnitTest(unittest.TestCase):
         self.assertNotEqual(result.reason, "max_steps")
         self.assertEqual(machine.memory.read(0x16), 0xC0)
 
+    def test_course_div_rejects_out_of_range_fraction_inputs(self) -> None:
+        text = (ROOT / "examples" / "signed_division_course.txt").read_text(encoding="utf-8")
+        records, micro_records = parse_combined_text(text)
+
+        machine = ModelMachine(input_values=[0x08, 0x04])
+        machine.load_records(records)
+        machine.load_microprogram_records(micro_records)
+
+        with self.assertRaisesRegex(Exception, r"\|dividend\| < \|divisor\|"):
+            machine.run(max_steps=2000, stop_on_output=False)
+
 
 if __name__ == "__main__":
     unittest.main()

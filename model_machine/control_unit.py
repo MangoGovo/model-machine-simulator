@@ -58,6 +58,7 @@ class ControlUnit:
         self.execution_mode = execution_mode
         self.halted = False
         self._course_result_address = 0x16
+        self._course_variant: str | None = None
 
     def run(self, max_steps: int = 10000, stop_on_output: bool = True) -> RunResult:
         traces: list[InstructionTrace] = []
@@ -365,38 +366,44 @@ class ControlUnit:
 
         mnemonic = ""
         halted = False
+        course_variant = self._detect_course_variant()
 
-        if opcode in {0x20, 0x21, 0x22, 0x23}:
-            dest = opcode & 0x03
+        group = opcode & 0xF0
+        dest = opcode & 0x03
+        src = (opcode >> 2) & 0x03
+
+        if group == 0x20:
             port = self._fetch_operand(operands, micro_ops)
             value = self.io.read(port)
             regs.set_reg(dest, self._transfer(f"IN[{port:02X}]", f"R{dest}", value, micro_ops))
             mnemonic = f"IN R{dest},{port:02X}H"
-        elif opcode == 0x61:
+        elif group == 0x60:
             _ = self._fetch_operand(operands, micro_ops)
             address = self._fetch_operand(operands, micro_ops)
             self._course_result_address = address
-            sign = (regs.get_reg(0) ^ regs.get_reg(1)) & 0x80
+            sign = (regs.get_reg(src) ^ regs.get_reg(dest)) & 0x80
             old = self.memory.read(address)
             self.memory.write(address, sign)
             memory_writes.append((address, old, sign))
             micro_ops.append(f"SIGNXOR->MEM[{address:02X}] ({sign:02X})")
-            mnemonic = f"XORF R0,R1,{address:02X}H"
-        elif opcode == 0x46:
-            value = regs.get_reg(1)
-            regs.set_reg(2, self._transfer("R1", "R2", value, micro_ops))
-            mnemonic = "MOV R2,R1"
-        elif opcode in {0x00, 0x04, 0x08, 0x0C}:
-            source = (opcode >> 2) & 0x03
+            mnemonic = f"XORF R{src},R{dest},{address:02X}H"
+        elif group == 0x40:
+            value = regs.get_reg(src)
+            regs.set_reg(dest, self._transfer(f"R{src}", f"R{dest}", value, micro_ops))
+            mnemonic = f"MOV R{src},R{dest}"
+        elif group == 0x00:
             target = self._fetch_operand(operands, micro_ops)
-            if (regs.get_reg(source) & 0x80) == 0:
+            if (regs.get_reg(src) & 0x80) == 0:
                 regs.pc = self._transfer("operand", "PC", target, micro_ops)
                 micro_ops.append("JNCA taken")
             else:
                 micro_ops.append("JNCA not taken")
-            mnemonic = f"JNCA R{source},{target:02X}H"
-        elif opcode in {0x10, 0x11, 0x12, 0x13}:
-            dest = opcode & 0x03
+            mnemonic = f"JNCA R{src},{target:02X}H"
+        elif group == 0x10 and course_variant == "new":
+            target = self._fetch_operand(operands, micro_ops)
+            regs.pc = self._transfer("operand", "PC", target, micro_ops)
+            mnemonic = f"JMP {target:02X}H"
+        elif group == 0x10 and course_variant == "legacy":
             immediate = self._fetch_operand(operands, micro_ops)
             old_value = regs.get_reg(dest)
             value = ((~old_value) + 1) & 0xFF
@@ -405,27 +412,39 @@ class ControlUnit:
             regs.fc = int(immediate == 0xFF and old_value != 0)
             micro_ops.append(f"FZ<-{regs.fz} FC<-{regs.fc}")
             mnemonic = f"NINC R{dest},{immediate:02X}H"
-        elif opcode == 0x30:
+        elif group == 0x30 and course_variant == "legacy" and dest == 0:
             target = self._fetch_operand(operands, micro_ops)
             regs.pc = self._transfer("operand", "PC", target, micro_ops)
             mnemonic = f"JMP {target:02X}H"
-        elif opcode == 0x51:
+        elif group == 0x30 and course_variant == "new":
+            old_value = regs.get_reg(dest)
+            value = ((~old_value) + 1) & 0xFF
+            regs.set_reg(dest, self._transfer("NEG", f"R{dest}", value, micro_ops))
+            regs.fz = int(value == 0)
+            regs.fc = int(old_value != 0)
+            micro_ops.append(f"FZ<-{regs.fz} FC<-{regs.fc}")
+            mnemonic = f"NINC R{dest}"
+        elif group == 0x50:
+            # The lab program still places a padding byte after DIV.
+            # Consume it so PC stays aligned with the report's layout.
             _ = self._fetch_operand(operands, micro_ops)
             result_address = self._course_result_address
-            dividend = regs.get_reg(0)
-            divisor = regs.get_reg(2) or regs.get_reg(1)
+            dividend = regs.get_reg(src)
+            divisor = regs.get_reg(2) or regs.get_reg(dest)
             if divisor == 0:
                 raise IllegalInstructionError("division by zero in course DIV")
-            quotient = int((dividend / divisor) * 0x80)
+            if dividend >= divisor:
+                raise IllegalInstructionError(
+                    "course DIV requires |dividend| < |divisor| in 1+7 fixed-point mode"
+                )
+            quotient = ((dividend << 7) // divisor) & 0xFF
             if self.memory.read(result_address) & 0x80:
-                quotient = (-quotient) & 0xFF
-            else:
-                quotient &= 0xFF
+                quotient = ((~quotient) + 1) & 0xFF
             old = self.memory.read(result_address)
             self.memory.write(result_address, quotient)
             memory_writes.append((result_address, old, quotient))
             micro_ops.append(f"DIV->MEM[{result_address:02X}] ({quotient:02X})")
-            mnemonic = f"DIV R0,R1,{result_address:02X}H"
+            mnemonic = f"DIV R{src},R{dest},{result_address:02X}H"
             halted = True
             self.halted = True
             micro_ops.append("HALT")
@@ -516,6 +535,12 @@ class ControlUnit:
 
     def _uses_real_microcode(self) -> bool:
         return bool(self.microprogram) and 0x01 in self.microprogram and 0x03 in self.microprogram
+
+    def _detect_course_variant(self) -> str:
+        if self._course_variant is None:
+            data = set(self.memory.data)
+            self._course_variant = "new" if any(value in data for value in {0x31, 0x32, 0x33}) else "legacy"
+        return self._course_variant
 
     def _ir_rs(self) -> int:
         return (self.registers.ir >> 2) & 0x03
